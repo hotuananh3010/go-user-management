@@ -5,91 +5,33 @@ import (
 	"html/template"
 	"log"
 	"net/http"
-	"os"
+	"path"
+	"strconv"
 
-	"github.com/gin-gonic/gin"
+	"github.com/go-playground/validator/v10"
+
+	"github.com/julienschmidt/httprouter"
 	_ "github.com/mattn/go-sqlite3"
 )
 
-// album represents data about a record album.
-type album struct {
-	ID     string  `json:"id"`
-	Title  string  `json:"title"`
-	Artist string  `json:"artist"`
-	Price  float64 `json:"price"`
-}
-
-// albums slice to seed record album data.
-var albums = []album{
-	{ID: "1", Title: "Blue Train", Artist: "John Coltrane", Price: 56.99},
-	{ID: "2", Title: "Jeru", Artist: "Gerry Mulligan", Price: 17.99},
-	{ID: "3", Title: "Sarah Vaughan and Clifford Brown", Artist: "Sarah Vaughan", Price: 39.99},
-}
-
-// getAlbums responds with the list of all albums as JSON.
-func getAlbums(c *gin.Context) {
-	c.IndentedJSON(http.StatusOK, albums)
-}
+// use a single instance of Validate, it caches struct info
+var validate *validator.Validate
 
 func main() {
-	log.Println("Creating sqlite-database.db...")
-	file, err := os.Create("sqlite-database.db") // Create SQLite file
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-	file.Close()
-	log.Println("sqlite-database.db created")
-	sqliteDatabase, _ := sql.Open("sqlite3", "./sqlite-database.db") // Open the created SQLite File
-	defer sqliteDatabase.Close()                                     // Defer Closing the database
-	createTable(sqliteDatabase)                                      // Create Database Tables
+	router := httprouter.New()
+	router.GET("/", Home)
+	router.GET("/home", Home)
+	router.GET("/users", users)
+	router.GET("/users/add", userAdd)
+	router.POST("/users/add", userAdd)
+	router.GET("/users/edit/:id", userEdit)
+	router.POST("/users/edit/:id", userEdit)
+	log.Fatal(http.ListenAndServe(":8080", router))
 
-	// INSERT RECORDS
-	insertStudent(sqliteDatabase, "0001", "Liana Kim", "Bachelor")
-	insertStudent(sqliteDatabase, "0002", "Glen Rangel", "Bachelor")
-	insertStudent(sqliteDatabase, "0003", "Martin Martins", "Master")
-	insertStudent(sqliteDatabase, "0004", "Alayna Armitage", "PHD")
-	insertStudent(sqliteDatabase, "0005", "Marni Benson", "Bachelor")
-	insertStudent(sqliteDatabase, "0006", "Derrick Griffiths", "Master")
-	insertStudent(sqliteDatabase, "0007", "Leigh Daly", "Bachelor")
-	insertStudent(sqliteDatabase, "0008", "Marni Benson", "PHD")
-	insertStudent(sqliteDatabase, "0009", "Klay Correa", "Bachelor")
+	// router := gin.Default()
+	// router.GET("/albums", getAlbums)
 
-	router := gin.Default()
-	router.GET("/albums", getAlbums)
-
-	router.Run("localhost:8080")
-}
-
-func createTable(db *sql.DB) {
-	createStudentTableSQL := `CREATE TABLE student (
-		"idStudent" integer NOT NULL PRIMARY KEY AUTOINCREMENT,		
-		"code" TEXT,
-		"name" TEXT,
-		"program" TEXT		
-	  );` // SQL Statement for Create Table
-
-	log.Println("Create student table...")
-	statement, err := db.Prepare(createStudentTableSQL) // Prepare SQL Statement
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-	statement.Exec() // Execute SQL Statements
-	log.Println("student table created")
-}
-
-// We are passing db reference connection from main to our method with other parameters
-func insertStudent(db *sql.DB, code string, name string, program string) {
-	log.Println("Inserting student record ...")
-	insertStudentSQL := `INSERT INTO student(code, name, program) VALUES (?, ?, ?)`
-	statement, err := db.Prepare(insertStudentSQL) // Prepare statement.
-	// This is good to avoid SQL injections
-	if err != nil {
-		log.Fatalln(err.Error())
-	}
-	_, err = statement.Exec(code, name, program)
-	if err != nil {
-		log.Fatalln(err.Error())
-	}
+	// router.Run("localhost:8080")
 }
 
 type Page struct {
@@ -97,11 +39,174 @@ type Page struct {
 	Body  []byte
 }
 
-var templates = template.Must(template.ParseFiles("edit.html", "view.html"))
+//var templates = template.Must(template.ParseFiles("templates/home.html", "templates/about.html", "templates/users/list.html", "templates/users/edit.html", "templates/users/add.html"))
 
-func renderTemplate(w http.ResponseWriter, tmpl string, p *Page) {
-	err := templates.ExecuteTemplate(w, tmpl+".html", p)
+func renderTemplate(w http.ResponseWriter, tmpl string, p any) {
+	t, err := template.New(path.Base(tmpl)).ParseFiles(tmpl)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+	err = t.Execute(w, p)
+	//err := templates.ExecuteTemplate(w, tmpl+".html", p)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func Home(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	//log.Println("Inserting student record ...")
+	data := struct {
+		Title string
+		Body  string
+	}{
+		"Home",
+		"HOME body",
+	}
+	renderTemplate(w, "templates/home.html", data)
+}
+
+type UserModel struct {
+	id      int
+	code    string `validate:"required"`
+	name    string `validate:"required"`
+	program string `validate:"required"`
+}
+
+func users(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	var data []UserModel
+
+	db, _ := sql.Open("sqlite3", "./sqlite-database.db") // Open the created SQLite File
+	defer db.Close()
+
+	row, err := db.Query("SELECT * FROM users")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer row.Close()
+	for row.Next() { // Iterate and fetch the records from result cursor
+		var id int
+		var code string
+		var name string
+		var program string
+		row.Scan(&id, &code, &name, &program)
+		item := UserModel{
+			id:      id,
+			code:    code,
+			name:    name,
+			program: program,
+		}
+		data = append(data, item)
+		//log.Println("Student: ", code, " ", name, " ", program)
+	}
+	renderTemplate(w, "templates/users/list.html", data)
+}
+
+func userAdd(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	var data []UserModel
+	db, _ := sql.Open("sqlite3", "./sqlite-database.db") // Open the created SQLite File
+	defer db.Close()
+	if r.Method == "GET" {
+		row, err := db.Query("SELECT * FROM users")
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer row.Close()
+		for row.Next() { // Iterate and fetch the records from result cursor
+			var id int
+			var code string
+			var name string
+			var program string
+			row.Scan(&id, &code, &name, &program)
+			item := UserModel{
+				id:      id,
+				code:    code,
+				name:    name,
+				program: program,
+			}
+			data = append(data, item)
+			//log.Println("Student: ", code, " ", name, " ", program)
+		}
+		renderTemplate(w, "templates/users/add.html", data)
+	} else if r.Method == "POST" {
+		validate = validator.New(validator.WithRequiredStructEnabled())
+
+		user := &UserModel{
+			code:    r.FormValue("code"),
+			name:    r.FormValue("name"),
+			program: r.FormValue("program"),
+		}
+		err := validate.Struct(user)
+		if err != nil {
+			log.Fatal(err)
+			http.Redirect(w, r, "/users/add", http.StatusFound)
+		}
+
+		//fmt.Fprintf(w, "Hi there, I love %s!", r.Method)
+		log.Println("Inserting student record ...")
+		insertStudentSQL := `INSERT INTO users(code, name, program) VALUES (?, ?, ?)`
+		statement, err := db.Prepare(insertStudentSQL) // Prepare statement.
+		// This is good to avoid SQL injections
+		if err != nil {
+			log.Fatalln(err.Error())
+		}
+		_, err = statement.Exec(user.code, user.name, user.program)
+		if err != nil {
+			log.Fatalln(err.Error())
+		}
+		http.Redirect(w, r, "/users", http.StatusFound)
+		return
+	}
+}
+
+func userEdit(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	var data UserModel
+	id := ps.ByName("id")
+	if _, err := strconv.Atoi(id); err == nil {
+		log.Printf("%q looks like a number.\n", id)
+	}
+
+	db, _ := sql.Open("sqlite3", "./sqlite-database.db") // Open the created SQLite File
+	defer db.Close()
+
+	if r.Method == "GET" {
+		row, err := db.Query("SELECT * FROM users WHERE id = ?", id)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer row.Close()
+		for row.Next() { // Iterate and fetch the records from result cursor
+			var id int
+			var code string
+			var name string
+			var program string
+			row.Scan(&id, &code, &name, &program)
+			data = UserModel{
+				id:      id,
+				code:    code,
+				name:    name,
+				program: program,
+			}
+		}
+		renderTemplate(w, "templates/users/edit.html", data)
+	} else if r.Method == "POST" {
+		id := r.FormValue("id")
+		code := r.FormValue("code")
+		name := r.FormValue("name")
+		program := r.FormValue("program")
+		//fmt.Fprintf(w, "Hi there, I love %s!", r.Method)
+		log.Println("Inserting student record ...")
+		insertStudentSQL := `UPDATE users SET code = ? , name = ?, program = ? WHERE id = ?`
+		statement, err := db.Prepare(insertStudentSQL) // Prepare statement.
+		// This is good to avoid SQL injections
+		if err != nil {
+			log.Fatalln(err.Error())
+		}
+		_, err = statement.Exec(code, name, program, id)
+		if err != nil {
+			log.Fatalln(err.Error())
+		}
+		http.Redirect(w, r, "/users", http.StatusFound)
+		return
+	}
+
 }
