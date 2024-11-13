@@ -13,19 +13,27 @@
 
     <div class="container">
         <h1>EDIT USER</h1>
+        {{if .FlashMessages}}
+            {{range $value := .FlashMessages}}
+                <div class="alert alert-danger">
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    {{ $value }}
+                </div>
+            {{end}}
+        {{end}}
         <p>
-        <form action="/users/add" method="post">
-            <input type="hidden" class="form-control" value={{.Id}} id="id" name="id">
+        <form action="/users/edit/{{.Data.Id}}" method="post">
+            <input type="hidden" class="form-control" value={{.Data.Id}} id="id" name="id">
             <div class="form-floating mb-3 mt-3">
-                <input type="text" class="form-control" value={{.Code}} id="code" placeholder="Enter code" name="code">
+                <input type="text" class="form-control" value={{.Data.Code}} id="code" placeholder="Enter code" name="code">
                 <label for="code">Code</label>
             </div>
             <div class="form-floating mt-3 mb-3">
-                <input type="text" class="form-control" value={{.Name}} id="name" placeholder="Enter name" name="name">
+                <input type="text" class="form-control" value={{.Data.Name}} id="name" placeholder="Enter name" name="name">
                 <label for="name">Name</label>
             </div>
             <div class="form-floating mt-3 mb-3">
-                <input type="text" class="form-control" value={{.Program}} id="program" placeholder="Enter program" name="program">
+                <input type="text" class="form-control" value={{.Data.Program}} id="program" placeholder="Enter program" name="program">
                 <label for="program">Program</label>
             </div>
             <button type="submit" class="btn btn-primary">Submit</button>

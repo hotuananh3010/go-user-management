@@ -12,7 +12,15 @@
 <body>
 
     <div class="container">
-        <h1>ADD USER</h1>
+        <h1>{{.Title}}</h1>
+        {{if .FlashMessages}}
+            {{range $value := .FlashMessages}}
+                <div class="alert alert-danger">
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    {{ $value }}
+                </div>
+            {{end}}
+        {{end}}
         <p>
         <form action="/users/add" method="post">
             <div class="form-floating mb-3 mt-3">
