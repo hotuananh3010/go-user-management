@@ -67,19 +67,19 @@ func UserStore(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 			SetFlash(w, r, err.Field()+" "+err.Tag())
 		}
 		http.Redirect(w, r, "/users/add", http.StatusFound)
+	} else {
+		insertStudentSQL := `INSERT INTO users(code, name, program) VALUES (?, ?, ?)`
+		statement, err := db.Prepare(insertStudentSQL) // Prepare statement.
+		// This is good to avoid SQL injections
+		if err != nil {
+			log.Fatalln(err.Error())
+		}
+		_, err = statement.Exec(user.Code, user.Name, user.Program)
+		if err != nil {
+			log.Fatalln(err.Error())
+		}
+		http.Redirect(w, r, "/users", http.StatusFound)
 	}
-
-	insertStudentSQL := `INSERT INTO users(code, name, program) VALUES (?, ?, ?)`
-	statement, err := db.Prepare(insertStudentSQL) // Prepare statement.
-	// This is good to avoid SQL injections
-	if err != nil {
-		log.Fatalln(err.Error())
-	}
-	_, err = statement.Exec(user.Code, user.Name, user.Program)
-	if err != nil {
-		log.Fatalln(err.Error())
-	}
-	http.Redirect(w, r, "/users", http.StatusFound)
 }
 
 func UserEdit(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
@@ -136,19 +136,19 @@ func UserUpdate(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 			SetFlash(w, r, err.Field()+" "+err.Tag())
 		}
 		http.Redirect(w, r, "/users/edit/"+id, http.StatusFound)
+	} else {
+		insertStudentSQL := `UPDATE users SET code = ? , name = ?, program = ? WHERE id = ?`
+		statement, err := db.Prepare(insertStudentSQL) // Prepare statement.
+		// This is good to avoid SQL injections
+		if err != nil {
+			log.Fatalln(err.Error())
+		}
+		_, err = statement.Exec(user.Code, user.Name, user.Program, id)
+		if err != nil {
+			log.Fatalln(err.Error())
+		}
+		http.Redirect(w, r, "/users", http.StatusFound)
 	}
-
-	insertStudentSQL := `UPDATE users SET code = ? , name = ?, program = ? WHERE id = ?`
-	statement, err := db.Prepare(insertStudentSQL) // Prepare statement.
-	// This is good to avoid SQL injections
-	if err != nil {
-		log.Fatalln(err.Error())
-	}
-	_, err = statement.Exec(user.Code, user.Name, user.Program, id)
-	if err != nil {
-		log.Fatalln(err.Error())
-	}
-	http.Redirect(w, r, "/users", http.StatusFound)
 
 }
 
